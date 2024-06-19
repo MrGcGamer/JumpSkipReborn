@@ -1,6 +1,4 @@
 #import "Tweak.h"
-#include <objc/objc.h>
-#include <objc/runtime.h>
 
 static MPCMediaRemoteController *_player;
 static NSInteger _lastEventCount = 0;
@@ -8,10 +6,10 @@ static BOOL _volUp = NO;
 static BOOL _volDown = NO;
 static NSTimer *_hold;
 static NSTimer *_timer;
-
-#define sendCommand(cmd) [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ NSLog(@"GC - [JumpSkipReborn] status: %@", status); }]
+static BOOL _isOnCoolDown = YES;
 
 @class MPRemoteCommandStatus;
+static inline void sendCommand(int cmd) { [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ /* NSLog(@"GC - [JumpSkipReborn] status: %@", status); */ }]; }
 static id (* orig_init) (MPCMediaRemoteController *, SEL);
 static id hook_init(MPCMediaRemoteController *self, SEL _cmd) {
 	id orig = _player = orig_init(self, _cmd);
@@ -59,10 +57,13 @@ static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		_hold = nil;
 		sendCommand(9);
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = NO; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
 		if (_volDown && _volUp) {
-			sendCommand(4);
+			if (!_isOnCoolDown) {
+				sendCommand(4); // Next track
+				_isOnCoolDown = YES;
+			}
 
 			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying]) {
 				return sendCommand(0);
@@ -94,10 +95,13 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		_hold = nil;
 		sendCommand(11);
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = NO; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
 		if (_volDown && _volUp) {
-			sendCommand(5);
+			if (!_isOnCoolDown) {
+				sendCommand(5); // Previous track
+				_isOnCoolDown = YES;
+			}
 
 			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying])
 				return sendCommand(0);
@@ -118,7 +122,7 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 
 
 static void __attribute__((constructor)) ctor() {
-	NSLog(@"GC - [JumpSkipReborn] Init");
+	NSLog(@"GC - [JumpSkipReborn] Loaded");
 	MSHookMessageEx(objc_getClass("MPCMediaRemoteController"), @selector(_init), (IMP)&hook_init, (IMP*)&orig_init);
 	MSHookMessageEx(objc_getClass("SpringBoard"), @selector(_handlePhysicalButtonEvent:), (IMP)&hook_handlePhysicalButtonEvent, (IMP*)&orig_handlePhysicalButtonEvent);
 
