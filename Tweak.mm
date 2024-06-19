@@ -1,4 +1,4 @@
-#import "Tweak.h"
+#import "Tweak.hh"
 
 static MPCMediaRemoteController *_player;
 static NSInteger _lastEventCount = 0;
