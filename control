@@ -1,0 +1,9 @@
+Package: com.mrgcgamer.jumpskipreborn
+Name: JumpSkipReborn
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: An awesome MobileSubstrate tweak!
+Maintainer: MrGcGamer
+Author: MrGcGamer
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000)
