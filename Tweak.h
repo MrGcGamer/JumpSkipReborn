@@ -1,9 +1,13 @@
-#include <UIKit/UIGestureRecognizer.h>
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-#import <objc/objc.h>
 #import <substrate.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h> // already importet by substrate.h...
 
+#ifdef DEBUG
+#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+#define GCLog(fmt, ...) do {NSLog((@"GC - [JumpSkipReborn] - [%s:%d]: " fmt), __FILENAME__, __LINE__, ##__VA_ARGS__);} while(0)
+#else
+#define GCLog(...)
+#endif
 
 @interface MPCMediaRemoteController : NSObject
 -(id)_init;
