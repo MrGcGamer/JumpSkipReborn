@@ -66,23 +66,17 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 		return orig(self, _cmd, gestureRecognizer);
 
 	long long pressPhase = [gestureRecognizer latestPressPhase];
-	if (pressPhase == 3) {
+	if (pressPhase == 3) { // Press ended
 		orig(self, _cmd, gestureRecognizer);
 		_status |= (1 << down);
 		[_hold invalidate];
-		_hold = nil;
 		sendCommand(9 | (down << 1));
 
 		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _status = _isOnCoolDown = 0; }];
 
-		if (_status == 3) {
-			if (!_isOnCoolDown) {
-				sendCommand(4 | down); // Previous track
-				_isOnCoolDown = YES;
-			}
-
-			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying])
-				return sendCommand(0);
+		if (_status == 3 && !_isOnCoolDown) {
+			sendCommand(4 | down); // Previous track
+			_isOnCoolDown = YES;
 		}
 	} else {
 		if (_status == down+1) return orig(self, _cmd, gestureRecognizer);
@@ -95,8 +89,6 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 		[_volumeController adjustVolumeValue:caster.b];
 
 		[_timer invalidate];
-		_timer = nil;
-
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
 			GCLog(@"%s _volDown: %d, _volUp: %d", down ? "DOWN" : "UP" , _status & 1, _status & 2);
 			if (_status == down+1) return;
