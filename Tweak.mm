@@ -1,9 +1,12 @@
 #import "Tweak.h"
+#include <_types/_uint8_t.h>
+#import <stdint.h>
 
 static MPCMediaRemoteController *_player;
 static NSInteger _lastEventCount = 0;
-static BOOL _volUp = NO;
-static BOOL _volDown = NO;
+static BOOL _status[2] = {NO, NO};
+#define _volUp _status[0]
+#define _volDown _status[1]
 static NSTimer *_hold;
 static NSTimer *_timer;
 static BOOL _isOnCoolDown = YES;
@@ -50,62 +53,34 @@ static BOOL hook_handlePhysicalButtonEvent(SpringBoard *self, SEL _cmd, UIPresse
 }
 
 @class SBVolumeHardwareButton;
+static void handle(SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *gestureRecognizer, uint8_t, void (*orig)(SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *));
 static void (* orig_volumeIncreasePress) (SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *);
 static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecognizer *gestureRecognizer) {
-	if (_lastEventCount == 2) // Don't do anything, if we already paused/resumed
-		return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
-
-	long long pressPhase = [gestureRecognizer latestPressPhase];
-	if (pressPhase == 3) {
-		orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
-		_volUp = YES;
-		[_hold invalidate];
-		_hold = nil;
-		sendCommand(9);
-
-		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
-
-		if (_volDown && _volUp) {
-			if (!_isOnCoolDown) {
-				sendCommand(4); // Next track
-				_isOnCoolDown = YES;
-			}
-
-			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying])
-				return sendCommand(0);
-		}
-	} else {
-		if (!_volDown || _volUp) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
-		[_volumeController adjustVolumeValue:0.0625];
-		[_timer invalidate];
-		_timer = nil;
-
-		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
-			GCLog(@"UP _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (_volUp || !_volDown) return;
-			sendCommand(8);
-			_volDown = _volUp = NO;
-		}];
-	}
+	return handle(self, _cmd, gestureRecognizer, 0, orig_volumeIncreasePress);
 }
+
 static void (* orig_volumeDecreasePress) (SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *);
 static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecognizer *gestureRecognizer) {
+	return handle(self, _cmd, gestureRecognizer, 1, orig_volumeDecreasePress);
+}
+
+static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecognizer *gestureRecognizer, uint8_t down, void (*orig)(SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *)) {
 	if (_lastEventCount == 2) // Don't do anything, if we already paused/resumed
-		return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
+		return orig(self, _cmd, gestureRecognizer);
 
 	long long pressPhase = [gestureRecognizer latestPressPhase];
 	if (pressPhase == 3) {
-		orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
-		_volDown = YES;
+		orig(self, _cmd, gestureRecognizer);
+		_status[down] = YES;
 		[_hold invalidate];
 		_hold = nil;
-		sendCommand(11);
+		sendCommand(9 + down * 2);
 
 		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
 		if (_volDown && _volUp) {
 			if (!_isOnCoolDown) {
-				sendCommand(5); // Previous track
+				sendCommand(4 + down); // Previous track
 				_isOnCoolDown = YES;
 			}
 
@@ -113,20 +88,26 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 				return sendCommand(0);
 		}
 	} else {
-		if (_volDown || !_volUp) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
-		[_volumeController adjustVolumeValue:-0.0625];
+		if ((down && (_volDown || !_volUp)) || (!down && (!_volDown || _volUp))) return orig(self, _cmd, gestureRecognizer);
+
+		union { // this part is hella cursed and kinda undefined behaviour, as floats aren't guaranteed to be IEEE-754
+			int a;
+			float b = 0.0625;
+		} caster;
+		caster.a ^= down << 31;
+		[_volumeController adjustVolumeValue:caster.b];
+
 		[_timer invalidate];
 		_timer = nil;
 
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
-			GCLog(@"DOWN _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (!_volUp || _volDown) return;
-			sendCommand(10);
+			GCLog(@"%s _volDown: %d, _volUp: %d", down ? "DOWN" : "UP" ,_volDown, _volUp);
+			if ((down && (!_volUp || _volDown)) || (!down && (_volUp || !_volDown))) return;
+			sendCommand(8 + down * 2);
 			_volDown = _volUp = NO;
 		}];
 	}
 }
-
 
 static void __attribute__((constructor)) ctor() {
 	GCLog(@"Loaded");
