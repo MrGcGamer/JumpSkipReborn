@@ -7,9 +7,13 @@ static BOOL _volDown = NO;
 static NSTimer *_hold;
 static NSTimer *_timer;
 static BOOL _isOnCoolDown = YES;
+static MPVolumeController *_volumeController;
+
+#define HOLD_TIME 0.3
+#define RESET_TIME 0.5
 
 @class MPRemoteCommandStatus;
-static inline void sendCommand(int cmd) { [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ /* NSLog(@"GC - [JumpSkipReborn] status: %@", status); */ }]; }
+static inline void sendCommand(int cmd) { [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ /* GCLog(@"status: %@", status); */ }]; }
 static id (* orig_init) (MPCMediaRemoteController *, SEL);
 static id hook_init(MPCMediaRemoteController *self, SEL _cmd) { // Initialised late.. maybe we can force it?
 	id orig = _player = orig_init(self, _cmd);
@@ -59,7 +63,7 @@ static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		_hold = nil;
 		sendCommand(9);
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
 		if (_volDown && _volUp) {
 			if (!_isOnCoolDown) {
@@ -72,10 +76,12 @@ static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		}
 	} else {
 		if (!_volDown || _volUp) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
+		[_volumeController adjustVolumeValue:0.0625];
 		[_timer invalidate];
 		_timer = nil;
 
-		_hold = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:NO block:^(NSTimer * _Nonnull timer) {
+		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
+			GCLog(@"UP _volDown: %d, _volUp: %d", _volDown, _volUp);
 			if (_volUp || !_volDown) return;
 			sendCommand(8);
 			_volDown = _volUp = NO;
@@ -95,7 +101,7 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		_hold = nil;
 		sendCommand(11);
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
 		if (_volDown && _volUp) {
 			if (!_isOnCoolDown) {
@@ -108,10 +114,12 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		}
 	} else {
 		if (_volDown || !_volUp) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
+		[_volumeController adjustVolumeValue:-0.0625];
 		[_timer invalidate];
 		_timer = nil;
 
-		_hold = [NSTimer scheduledTimerWithTimeInterval:0.3 repeats:NO block:^(NSTimer * _Nonnull timer) {
+		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
+			GCLog(@"DOWN _volDown: %d, _volUp: %d", _volDown, _volUp);
 			if (!_volUp || _volDown) return;
 			sendCommand(10);
 			_volDown = _volUp = NO;
@@ -122,6 +130,7 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 
 static void __attribute__((constructor)) ctor() {
 	GCLog(@"Loaded");
+	_volumeController = [[objc_getClass("MPVolumeController") alloc] init];
 	MSHookMessageEx(objc_getClass("MPCMediaRemoteController"), @selector(_init), (IMP)&hook_init, (IMP*)&orig_init);
 	MSHookMessageEx(objc_getClass("SpringBoard"), @selector(_handlePhysicalButtonEvent:), (IMP)&hook_handlePhysicalButtonEvent, (IMP*)&orig_handlePhysicalButtonEvent);
 

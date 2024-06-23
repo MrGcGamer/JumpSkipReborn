@@ -18,18 +18,11 @@
 -(long long)latestPressPhase;
 @end
 
-@interface SBVolumeControl : NSObject
--(void)increaseVolume;
--(void)decreaseVolume;
-@end
-
-@interface SBUIController : NSObject {
-	SBVolumeControl* _volumeControl;
-}
-+(id)sharedInstance;
-@end
-
 @interface SBMediaController : NSObject
 +(instancetype)sharedInstance;
 -(BOOL)isPlaying;
+@end
+
+@interface MPVolumeController : NSObject
+-(void)adjustVolumeValue:(float)arg1;
 @end
