@@ -1,12 +1,9 @@
 #import "Tweak.h"
-#include <_types/_uint8_t.h>
 #import <stdint.h>
 
 static MPCMediaRemoteController *_player;
 static NSInteger _lastEventCount = 0;
-static BOOL _status[2] = {NO, NO};
-#define _volUp _status[0]
-#define _volDown _status[1]
+static uint8_t _status;
 static NSTimer *_hold;
 static NSTimer *_timer;
 static BOOL _isOnCoolDown = YES;
@@ -71,16 +68,16 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 	long long pressPhase = [gestureRecognizer latestPressPhase];
 	if (pressPhase == 3) {
 		orig(self, _cmd, gestureRecognizer);
-		_status[down] = YES;
+		_status |= (1 << down);
 		[_hold invalidate];
 		_hold = nil;
-		sendCommand(9 + down * 2);
+		sendCommand(9 | (down << 1));
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _status = _isOnCoolDown = 0; }];
 
-		if (_volDown && _volUp) {
+		if (_status == 3) {
 			if (!_isOnCoolDown) {
-				sendCommand(4 + down); // Previous track
+				sendCommand(4 | down); // Previous track
 				_isOnCoolDown = YES;
 			}
 
@@ -88,7 +85,7 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 				return sendCommand(0);
 		}
 	} else {
-		if ((down && (_volDown || !_volUp)) || (!down && (!_volDown || _volUp))) return orig(self, _cmd, gestureRecognizer);
+		if (_status == down+1) return orig(self, _cmd, gestureRecognizer);
 
 		union { // this part is hella cursed and kinda undefined behaviour, as floats aren't guaranteed to be IEEE-754
 			int a;
@@ -101,10 +98,10 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 		_timer = nil;
 
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
-			GCLog(@"%s _volDown: %d, _volUp: %d", down ? "DOWN" : "UP" ,_volDown, _volUp);
-			if ((down && (!_volUp || _volDown)) || (!down && (_volUp || !_volDown))) return;
-			sendCommand(8 + down * 2);
-			_volDown = _volUp = NO;
+			GCLog(@"%s _volDown: %d, _volUp: %d", down ? "DOWN" : "UP" , _status & 1, _status & 2);
+			if (_status == down+1) return;
+			sendCommand(8 | (down << 1));
+			_status = 0;
 		}];
 	}
 }
@@ -118,5 +115,4 @@ static void __attribute__((constructor)) ctor() {
 	Class volButton = objc_getClass("SBVolumeHardwareButton");
 	MSHookMessageEx(volButton, @selector(volumeIncreasePress:), (IMP)&hook_volumeIncreasePress, (IMP*)&orig_volumeIncreasePress);
 	MSHookMessageEx(volButton, @selector(volumeDecreasePress:), (IMP)&hook_volumeDecreasePress, (IMP*)&orig_volumeDecreasePress);
-
 }
