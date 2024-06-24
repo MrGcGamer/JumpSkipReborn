@@ -72,14 +72,14 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 		[_hold invalidate];
 		sendCommand(9 | (down << 1));
 
-		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _status = _isOnCoolDown = 0; }];
+		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _status = _isOnCoolDown = 0; GCLog(@"Timer Fired"); }];
 
 		if (_status == 3 && !_isOnCoolDown) {
-			sendCommand(4 | down); // Previous track
+			sendCommand(4 | down);
 			_isOnCoolDown = YES;
 		}
 	} else {
-		if (_status == down+1) return orig(self, _cmd, gestureRecognizer);
+		if (_status ^ (2 >> down)) return orig(self, _cmd, gestureRecognizer);
 
 		union { // this part is hella cursed and kinda undefined behaviour, as floats aren't guaranteed to be IEEE-754
 			int a;
@@ -90,8 +90,8 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 
 		[_timer invalidate];
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
-			GCLog(@"%s _volDown: %d, _volUp: %d", down ? "DOWN" : "UP" , _status & 1, _status & 2);
-			if (_status == down+1) return;
+			GCLog(@"%s _volDown: %d, _volUp: %d, _status:%d", down ? "DOWN" : "UP" , _status & 0b1, _status & 0b10, _status);
+			if (_status ^ (2 >> down)) return orig(self, _cmd, gestureRecognizer);
 			sendCommand(8 | (down << 1));
 			_status = 0;
 		}];
