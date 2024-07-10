@@ -60,29 +60,22 @@ static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
 		_volUp = YES;
 		[_hold invalidate];
-		_hold = nil;
 		sendCommand(9);
 
 		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
-		if (_volDown && _volUp) {
-			if (!_isOnCoolDown) {
-				sendCommand(4); // Next track
-				_isOnCoolDown = YES;
-			}
-
-			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying])
-				return sendCommand(0);
+		if (_volDown && _volUp && !_isOnCoolDown) {
+			sendCommand(4); // Next track
+			_isOnCoolDown = YES;
 		}
 	} else {
 		if (!_volDown || _volUp) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
 		[_volumeController adjustVolumeValue:0.0625];
-		[_timer invalidate];
-		_timer = nil;
 
+		[_timer invalidate];
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
 			GCLog(@"UP _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (_volUp || !_volDown) return;
+			if (_volUp || !_volDown) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);;
 			sendCommand(8);
 			_volDown = _volUp = NO;
 		}];
@@ -98,29 +91,22 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 		orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
 		_volDown = YES;
 		[_hold invalidate];
-		_hold = nil;
 		sendCommand(11);
 
 		_timer = [NSTimer scheduledTimerWithTimeInterval:RESET_TIME repeats:NO block:^(NSTimer * _Nonnull timer) { _volDown = _volUp = _isOnCoolDown = NO; }];
 
-		if (_volDown && _volUp) {
-			if (!_isOnCoolDown) {
-				sendCommand(5); // Previous track
-				_isOnCoolDown = YES;
-			}
-
-			if ([[objc_getClass("SBMediaController") sharedInstance] isPlaying])
-				return sendCommand(0);
+		if (_volDown && _volUp && !_isOnCoolDown) {
+			sendCommand(5); // Previous track
+			_isOnCoolDown = YES;
 		}
 	} else {
 		if (_volDown || !_volUp) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
 		[_volumeController adjustVolumeValue:-0.0625];
-		[_timer invalidate];
-		_timer = nil;
 
+		[_timer invalidate];
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
 			GCLog(@"DOWN _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (!_volUp || _volDown) return;
+			if (!_volUp || _volDown) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);;
 			sendCommand(10);
 			_volDown = _volUp = NO;
 		}];
