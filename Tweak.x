@@ -14,17 +14,18 @@ static MPVolumeController *_volumeController;
 
 @class MPRemoteCommandStatus;
 static inline void sendCommand(int cmd) { [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ /* GCLog(@"status: %@", status); */ }]; }
-static id (* orig_init) (MPCMediaRemoteController *, SEL);
-static id hook_init(MPCMediaRemoteController *self, SEL _cmd) { // Initialised late.. maybe we can force it?
-	id orig = _player = orig_init(self, _cmd);
+%hook MPCMediaRemoteController
+- (id)_init {
+	id orig = _player = %orig;
 	GCLog(@"got player: %@", _player);
 	return orig;
 }
+%end // MPCMediaRemoteController
 
-@class SpringBoard;
-static BOOL (* orig_handlePhysicalButtonEvent) (SpringBoard *, SEL, UIPressesEvent *);
-static BOOL hook_handlePhysicalButtonEvent(SpringBoard *self, SEL _cmd, UIPressesEvent *event) {
-	BOOL orig = orig_handlePhysicalButtonEvent(self, _cmd, event);
+%hook SpringBoard
+- (BOOL)_handlePhysicalButtonEvent:(UIPressesEvent *)event {
+	BOOL orig = %orig;
+
 	NSInteger count = _lastEventCount = event.allPresses.allObjects.count;
 
 	GCLog(@"count: %ld", (long)count);
@@ -48,16 +49,16 @@ static BOOL hook_handlePhysicalButtonEvent(SpringBoard *self, SEL _cmd, UIPresse
 
 	return orig;
 }
+%end // SpringBoard
 
-@class SBVolumeHardwareButton;
-static void (* orig_volumeIncreasePress) (SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *);
-static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecognizer *gestureRecognizer) {
+%hook SBVolumeHardwareButton
+- (void)volumeIncreasePress:(SBPressGestureRecognizer *)gestureRecognizer {
 	if (_lastEventCount == 2) // Don't do anything, if we already paused/resumed
-		return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
+		return %orig;
 
 	long long pressPhase = [gestureRecognizer latestPressPhase];
 	if (pressPhase == 3) {
-		orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
+		%orig;
 		_volUp = YES;
 		[_hold invalidate];
 		sendCommand(9);
@@ -69,26 +70,25 @@ static void hook_volumeIncreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 			_isOnCoolDown = YES;
 		}
 	} else {
-		if (!_volDown || _volUp) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);
+		if (!_volDown || _volUp) return %orig;
 		[_volumeController adjustVolumeValue:0.0625];
 
 		[_timer invalidate];
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
 			GCLog(@"UP _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (_volUp || !_volDown) return orig_volumeIncreasePress(self, _cmd, gestureRecognizer);;
+			if (_volUp || !_volDown) return %orig;
 			sendCommand(8);
 			_volDown = _volUp = NO;
 		}];
 	}
 }
-static void (* orig_volumeDecreasePress) (SBVolumeHardwareButton *, SEL, SBPressGestureRecognizer *);
-static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecognizer *gestureRecognizer) {
+- (void)volumeDecreasePress:(SBPressGestureRecognizer *)gestureRecognizer {
 	if (_lastEventCount == 2) // Don't do anything, if we already paused/resumed
-		return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
+		return %orig;
 
 	long long pressPhase = [gestureRecognizer latestPressPhase];
 	if (pressPhase == 3) {
-		orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
+		%orig;
 		_volDown = YES;
 		[_hold invalidate];
 		sendCommand(11);
@@ -100,28 +100,21 @@ static void hook_volumeDecreasePress(SBVolumeHardwareButton *self, SEL _cmd, SBP
 			_isOnCoolDown = YES;
 		}
 	} else {
-		if (_volDown || !_volUp) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);
+		if (_volDown || !_volUp) return %orig;
 		[_volumeController adjustVolumeValue:-0.0625];
 
 		[_timer invalidate];
 		_hold = [NSTimer scheduledTimerWithTimeInterval:HOLD_TIME repeats:NO block:^(NSTimer * _Nonnull timer) {
 			GCLog(@"DOWN _volDown: %d, _volUp: %d", _volDown, _volUp);
-			if (!_volUp || _volDown) return orig_volumeDecreasePress(self, _cmd, gestureRecognizer);;
+			if (!_volUp || _volDown) return %orig;
 			sendCommand(10);
 			_volDown = _volUp = NO;
 		}];
 	}
 }
+%end // SBVolumeHardwareButton
 
-
-static void __attribute__((constructor)) ctor() {
+%ctor {
 	GCLog(@"Loaded");
 	_volumeController = [[objc_getClass("MPVolumeController") alloc] init];
-	MSHookMessageEx(objc_getClass("MPCMediaRemoteController"), @selector(_init), (IMP)&hook_init, (IMP*)&orig_init);
-	MSHookMessageEx(objc_getClass("SpringBoard"), @selector(_handlePhysicalButtonEvent:), (IMP)&hook_handlePhysicalButtonEvent, (IMP*)&orig_handlePhysicalButtonEvent);
-
-	Class volButton = objc_getClass("SBVolumeHardwareButton");
-	MSHookMessageEx(volButton, @selector(volumeIncreasePress:), (IMP)&hook_volumeIncreasePress, (IMP*)&orig_volumeIncreasePress);
-	MSHookMessageEx(volButton, @selector(volumeDecreasePress:), (IMP)&hook_volumeDecreasePress, (IMP*)&orig_volumeDecreasePress);
-
 }

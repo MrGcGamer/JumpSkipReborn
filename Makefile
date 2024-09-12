@@ -7,8 +7,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = JumpSkipReborn
 
-JumpSkipReborn_FILES = Tweak.mm
+JumpSkipReborn_FILES = Tweak.x
 JumpSkipReborn_CFLAGS = -fobjc-arc
-JumpSkipReborn_LIBRARIES += substrate
 
 include $(THEOS_MAKE_PATH)/tweak.mk

@@ -1,6 +1,5 @@
-#import <substrate.h>
 #import <UIKit/UIKit.h>
-#import <objc/runtime.h> // already importet by substrate.h...
+#import <objc/runtime.h>
 
 #ifdef DEBUG
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -16,11 +15,6 @@
 
 @interface SBPressGestureRecognizer : UIGestureRecognizer
 -(long long)latestPressPhase;
-@end
-
-@interface SBMediaController : NSObject
-+(instancetype)sharedInstance;
--(BOOL)isPlaying;
 @end
 
 @interface MPVolumeController : NSObject
