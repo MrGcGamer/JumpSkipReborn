@@ -9,10 +9,6 @@
 #define GCLog(...)
 #endif
 
-@interface MPCMediaRemoteController : NSObject
--(id)_init;
--(void)sendCommand:(unsigned)arg1 options:(id)arg2 completion:(/*^block*/id)arg3;
-@end
 
 @interface SBPressGestureRecognizer : UIGestureRecognizer
 -(long long)latestPressPhase;

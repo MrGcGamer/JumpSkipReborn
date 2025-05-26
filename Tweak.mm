@@ -1,7 +1,6 @@
 #import "Tweak.h"
-#import <stdint.h>
+#import <MediaRemote/MediaRemote.h>
 
-static MPCMediaRemoteController *_player;
 static NSInteger _lastEventCount = 0;
 static uint8_t _status;
 static NSTimer *_hold;
@@ -12,14 +11,7 @@ static MPVolumeController *_volumeController;
 #define HOLD_TIME 0.3
 #define RESET_TIME 0.5
 
-@class MPRemoteCommandStatus;
-static inline void sendCommand(int cmd) { [_player sendCommand:cmd options:0 completion:^(MPRemoteCommandStatus *status){ /* GCLog(@"status: %@", status); */ }]; }
-static id (* orig_init) (MPCMediaRemoteController *, SEL);
-static id hook_init(MPCMediaRemoteController *self, SEL _cmd) { // Initialised late.. maybe we can force it?
-	id orig = _player = orig_init(self, _cmd);
-	GCLog(@"got player: %@", _player);
-	return orig;
-}
+static inline void sendCommand(int cmd) { MRMediaRemoteSendCommand((MRMediaRemoteCommand)cmd, nil); }
 
 @class SpringBoard;
 static BOOL (* orig_handlePhysicalButtonEvent) (SpringBoard *, SEL, UIPressesEvent *);
@@ -36,12 +28,7 @@ static BOOL hook_handlePhysicalButtonEvent(SpringBoard *self, SEL _cmd, UIPresse
 
 		if (press1.force != press2.force) return orig;
 
-		UIPressType t1 = press1.type;
-		UIPressType t2 = press2.type;
-
-		if (t1 != 102 && t1 != 103) return orig; // Guess I'll find out what those constants are some time
-		if (t2 != 102 && t2 != 103) return orig; // Guess I'll find out what those constants are some time
-
+		if ((102 ^ press1.type) ^ (103 ^ press2.type)) return orig; // Guess I'll find out what those constants are some time
 		// Play / Pause playback
 		sendCommand(2);
 	}
@@ -101,7 +88,6 @@ static void handle(SBVolumeHardwareButton *self, SEL _cmd, SBPressGestureRecogni
 static void __attribute__((constructor)) ctor() {
 	GCLog(@"Loaded");
 	_volumeController = [[objc_getClass("MPVolumeController") alloc] init];
-	MSHookMessageEx(objc_getClass("MPCMediaRemoteController"), @selector(_init), (IMP)&hook_init, (IMP*)&orig_init);
 	MSHookMessageEx(objc_getClass("SpringBoard"), @selector(_handlePhysicalButtonEvent:), (IMP)&hook_handlePhysicalButtonEvent, (IMP*)&orig_handlePhysicalButtonEvent);
 
 	Class volButton = objc_getClass("SBVolumeHardwareButton");
